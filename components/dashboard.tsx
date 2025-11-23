@@ -22,12 +22,41 @@ import {
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Download, Share2 } from "lucide-react"
+import type { InterviewResult } from "@/lib/interview-engine"
 
 interface DashboardProps {
   state: any
+  interviewResult?: InterviewResult | null
 }
 
-export function Dashboard({ state }: DashboardProps) {
+export function Dashboard({ state, interviewResult }: DashboardProps) {
+  // Compute insights from interviewResult
+  const insights = useMemo(() => {
+    if (interviewResult?.overall) {
+      return {
+        overallScore: interviewResult.overall,
+        breakdown: interviewResult.breakdown,
+        highlights: (interviewResult.highlights || []).map(h => 
+          typeof h === 'string' ? h : h.quote
+        ),
+        suggestions: interviewResult.improvementSuggestions || [],
+      }
+    }
+    // Fallback to legacy scoring
+    return {
+      overallScore: 0,
+      breakdown: {
+        roleFit: 0,
+        technical: 0,
+        structure: 0,
+        communication: 0,
+        initiative: 0,
+      },
+      highlights: [],
+      suggestions: [],
+    }
+  }, [interviewResult])
+
   const metrics = useMemo(() => {
     const scores = state.recentScores || []
     const avgScore = scores.length > 0 ? scores.reduce((a: number, b: number) => a + b, 0) / scores.length : 0
@@ -316,77 +345,43 @@ export function Dashboard({ state }: DashboardProps) {
           <h3 className="text-lg font-semibold text-white mb-6">Key Insights & Recommendations</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <div className="border-l-4 border-green-500 pl-4">
-                <p className="font-semibold text-green-400 text-sm">Standout Performance</p>
-                <p className="text-slate-300 text-sm mt-1">
-                  You demonstrated strong communication skills and clear thinking throughout the interview. Your answers
-                  were well-structured and showed good depth.
-                </p>
-              </div>
-              <div className="border-l-4 border-green-500 pl-4">
-                <p className="font-semibold text-green-400 text-sm">Consistent Improvement</p>
-                <p className="text-slate-300 text-sm mt-1">
-                  Your performance improved as the interview progressed, showing adaptability and learning ability.
-                </p>
-              </div>
+              {insights.highlights && insights.highlights.length > 0 ? (
+                insights.highlights.map((highlight, idx) => (
+                  <div key={idx} className="border-l-4 border-green-500 pl-4">
+                    <p className="font-semibold text-green-400 text-sm">
+                      {idx === 0 ? "Standout Performance" : "Strength"}
+                    </p>
+                    <p className="text-slate-300 text-sm mt-1">{highlight}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="border-l-4 border-green-500 pl-4">
+                  <p className="font-semibold text-green-400 text-sm">Strengths</p>
+                  <p className="text-slate-300 text-sm mt-1">
+                    Complete the interview to see personalized highlights based on your responses.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
-              <div className="border-l-4 border-yellow-500 pl-4">
-                <p className="font-semibold text-yellow-400 text-sm">Areas for Growth</p>
-                <p className="text-slate-300 text-sm mt-1">
-                  Consider deepening your knowledge in system design at scale and distributed system patterns. These are
-                  commonly tested at senior levels.
-                </p>
-              </div>
-              <div className="border-l-4 border-blue-500 pl-4">
-                <p className="font-semibold text-blue-400 text-sm">Next Steps</p>
-                <p className="text-slate-300 text-sm mt-1">
-                  Practice mock interviews focusing on your gap areas. Review industry best practices and case studies.
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Preparation Roadmap */}
-        <Card className="border-slate-800 bg-slate-900/50 backdrop-blur p-8">
-          <h3 className="text-lg font-semibold text-white mb-6">Personalized Preparation Roadmap</h3>
-          <div className="space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-red-600/30 border border-red-600 flex items-center justify-center flex-shrink-0 mt-1">
-                <span className="text-red-400 font-bold">1</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">High Priority: System Design Fundamentals</p>
-                <p className="text-slate-400 text-sm mt-1">
-                  Study distributed systems, scalability patterns, and common architectural decisions. Time: 2-3 weeks.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-yellow-600/30 border border-yellow-600 flex items-center justify-center flex-shrink-0 mt-1">
-                <span className="text-yellow-400 font-bold">2</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Medium Priority: Problem-Solving Techniques</p>
-                <p className="text-slate-400 text-sm mt-1">
-                  Practice algorithmic problem-solving and analysis. Conduct 2-3 mock interviews per week.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-blue-600/30 border border-blue-600 flex items-center justify-center flex-shrink-0 mt-1">
-                <span className="text-blue-400 font-bold">3</span>
-              </div>
-              <div>
-                <p className="font-semibold text-white">Ongoing: Communication Skills</p>
-                <p className="text-slate-400 text-sm mt-1">
-                  You're already strong here, but continue refining how you explain complex concepts clearly.
-                </p>
-              </div>
+              {insights.suggestions && insights.suggestions.length > 0 ? (
+                insights.suggestions.map((suggestion, idx) => (
+                  <div key={idx} className="border-l-4 border-yellow-500 pl-4">
+                    <p className="font-semibold text-yellow-400 text-sm">
+                      {idx === 0 ? "Areas for Growth" : "Improvement Opportunity"}
+                    </p>
+                    <p className="text-slate-300 text-sm mt-1">{suggestion}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="border-l-4 border-yellow-500 pl-4">
+                  <p className="font-semibold text-yellow-400 text-sm">Areas for Growth</p>
+                  <p className="text-slate-300 text-sm mt-1">
+                    Complete the interview to receive personalized improvement suggestions.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </Card>

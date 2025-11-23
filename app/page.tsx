@@ -6,10 +6,11 @@ import { RoleSelection } from "@/components/role-selection"
 import { InterviewSession } from "@/components/interview-session"
 import { FeedbackSession } from "@/components/feedback-session"
 import { Dashboard } from "@/components/dashboard"
+import type { InterviewResult } from "@/lib/interview-engine"
 
 export default function Home() {
   const [phase, setPhase] = useState<"setup" | "role" | "interviewing" | "feedback" | "dashboard">("setup")
-  const [state, setState] = useState({
+  const [state, setState] = useState<any>({
     uploads: {
       cv: null,
       jd: null,
@@ -21,6 +22,7 @@ export default function Home() {
     questionsAsked: 0,
     recentScores: [],
   })
+  const [interviewResult, setInterviewResult] = useState<InterviewResult | null>(null)
 
   const handleContinue = (cvData, jdData) => {
     setState((prev) => ({
@@ -43,11 +45,12 @@ export default function Home() {
     setPhase("interviewing")
   }
 
-  const handleInterviewComplete = (finalScores) => {
+  const handleInterviewComplete = (finalScores: number[], result: InterviewResult | null) => {
     setState((prev) => ({
       ...prev,
       recentScores: finalScores,
     }))
+    setInterviewResult(result)
     setPhase("feedback")
   }
 
@@ -68,8 +71,8 @@ export default function Home() {
       {phase === "setup" && <LandingScreen onContinue={handleContinue} />}
       {phase === "role" && <RoleSelection onSelect={handleRoleSelect} />}
       {phase === "interviewing" && <InterviewSession state={state} onComplete={handleInterviewComplete} />}
-      {phase === "feedback" && <FeedbackSession state={state} onComplete={handleFeedbackComplete} />}
-      {phase === "dashboard" && <Dashboard state={state} />}
+      {phase === "feedback" && <FeedbackSession state={state} interviewResult={interviewResult} onComplete={handleFeedbackComplete} />}
+      {phase === "dashboard" && <Dashboard state={state} interviewResult={interviewResult} />}
     </div>
   )
 }

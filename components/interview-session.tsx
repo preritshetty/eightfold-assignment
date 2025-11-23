@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Mic, Volume2, Loader, PhoneOff } from "lucide-react"
 import { useRealtimeInterview } from "@/hooks/use-realtime-interview"
+import type { InterviewResult } from "@/lib/interview-engine"
 
 interface InterviewSessionProps {
   state: any
-  onComplete: (scores: number[]) => void
+  onComplete: (scores: number[], result: InterviewResult | null) => void
 }
 
 export function InterviewSession({ state, onComplete }: InterviewSessionProps) {
@@ -27,6 +28,7 @@ export function InterviewSession({ state, onComplete }: InterviewSessionProps) {
     startInterview,
     stopInterview,
     setOnScoreUpdate,
+    finalizeInterview,
   } = useRealtimeInterview(state)
 
   // Track score updates from the AI agent
@@ -35,8 +37,8 @@ export function InterviewSession({ state, onComplete }: InterviewSessionProps) {
       setScores((prev) => [...prev, score])
       setQuestionsAsked(question)
 
-      // End interview after 8 questions
-      if (question >= 8) {
+      // End interview after 15 questions
+      if (question >= 15) {
         handleEndInterview([...scores, score])
       }
     })
@@ -47,10 +49,13 @@ export function InterviewSession({ state, onComplete }: InterviewSessionProps) {
     await startInterview()
   }
 
-  const handleEndInterview = (finalScores: number[]) => {
+  const handleEndInterview = async (finalScores: number[]) => {
     setIsActive(false)
     stopInterview()
-    onComplete(finalScores)
+    
+    // Finalize interview and compute comprehensive scores
+    const result = await finalizeInterview()
+    onComplete(finalScores, result)
   }
 
   return (

@@ -1,6 +1,9 @@
 import { generateText } from "ai"
 import { google } from "@ai-sdk/google"
 
+// Re-export computeScore from enhanced-scoring
+export { computeScore } from "./enhanced-scoring"
+
 export interface InterviewContext {
   role: string
   level: string
@@ -15,6 +18,81 @@ export interface QuestionAnalysis {
   followUp?: string
   expectedKeywords: string[]
   difficulty: number
+}
+
+// Enhanced interfaces for resume-aware question generation
+export interface ConversationMessage {
+  speaker: "user" | "ai"
+  text: string
+  timestamp?: number
+  meta?: any
+}
+
+export interface QuestionMetadata {
+  id: string
+  topic: string
+  difficulty: "easy" | "medium" | "hard"
+  expectedPoints?: string[]
+  type?: "behavioral" | "technical" | "background" | "clarifying"
+  coverage?: number
+}
+
+export interface GenerateQuestionRequest {
+  role: string
+  experienceLevel?: string
+  resumeText?: string
+  resume_url?: string
+  conversationHistory: ConversationMessage[]
+  lastQuestionId?: string | null
+  questionNumber: number
+}
+
+export interface GenerateQuestionResponse {
+  question_id: string
+  question_text: string
+  topic: string
+  difficulty: "easy" | "medium" | "hard"
+  type: "behavioral" | "technical" | "background" | "clarifying"
+  expected_points: string[]
+  follow_up_allowed: boolean
+  follow_ups?: Array<{ id: string; text: string; weight: number }>
+  coverage: number // 0.0 - 1.0
+  rationale: string
+}
+
+// Scoring interfaces
+export interface ScoringInputs {
+  conversationTranscript: string
+  resumeText?: string
+  questionMeta: QuestionMetadata[]
+  role: string
+  experienceLevel: string
+}
+
+export interface ScoreBreakdown {
+  roleFit: number // 0-100
+  technical: number // 0-100
+  structure: number // 0-100 (STAR method, examples)
+  communication: number // 0-100
+  initiative: number // 0-100 (follow-ups, depth)
+}
+
+export interface Highlight {
+  q_id: string
+  quote: string
+  why: string
+}
+
+export interface InterviewResult {
+  overall: number // 0-100
+  breakdown: ScoreBreakdown
+  highlights: Highlight[] | string[] // Support both formats
+  improvementSuggestions: string[]
+  stats: {
+    questionsAnswered: number
+    durationMinutes?: number
+  }
+  raw_notes?: string
 }
 
 export async function generateInterviewQuestion(
@@ -162,7 +240,17 @@ export async function generateInterviewSummary(context: InterviewContext): Promi
   gaps: string[]
   recommendations: string[]
 }> {
-  const avgScore = context.scores.length > 0 ? context.scores.reduce((a, b) => a + b, 0) / context.scores.length : 5
+  // Return zeros if no scores available
+  if (!context.scores || context.scores.length === 0) {
+    return {
+      overallScore: 0,
+      strengths: ["No interview data available"],
+      gaps: ["Complete an interview to see results"],
+      recommendations: ["Start a new interview session"],
+    }
+  }
+
+  const avgScore = context.scores.reduce((a, b) => a + b, 0) / context.scores.length
 
   const prompt = `
 Interview Summary for ${context.level}-level ${context.role} candidate.

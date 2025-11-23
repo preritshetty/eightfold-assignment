@@ -5,15 +5,21 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Mic, Send, Loader } from "lucide-react"
 import { generateInterviewSummary, generateFeedbackResponse } from "@/lib/interview-engine"
+import type { InterviewResult } from "@/lib/interview-engine"
 
 interface FeedbackSessionProps {
   state: any
+  interviewResult?: InterviewResult | null
   onComplete: () => void
 }
 
-export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
+export function FeedbackSession({ state, interviewResult, onComplete }: FeedbackSessionProps) {
   const [overallScore, setOverallScore] = useState(0)
-  const [summary, setSummary] = useState({
+  const [summary, setSummary] = useState<{
+    strengths: string[]
+    gaps: string[]
+    recommendations: string[]
+  }>({
     strengths: [],
     gaps: [],
     recommendations: [],
@@ -30,7 +36,8 @@ export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
 
   useEffect(() => {
     loadInterviewSummary()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interviewResult])
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -68,6 +75,68 @@ export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
 
   const loadInterviewSummary = async () => {
     try {
+      // Check if interview was actually completed
+      const hasScores = state.recentScores && state.recentScores.length > 0
+      const hasInterviewResult = interviewResult && interviewResult.overall > 0
+      
+      console.log('[FeedbackSession] Debug:', {
+        hasScores,
+        hasInterviewResult,
+        scoresLength: state.recentScores?.length || 0,
+        interviewResultOverall: interviewResult?.overall || 0,
+        recentScores: state.recentScores,
+      })
+      
+      if (!hasScores && !hasInterviewResult) {
+        // No interview completed - show placeholder
+        console.log('[FeedbackSession] No interview data - showing placeholder')
+        setOverallScore(0)
+        setSummary({
+          strengths: ["No interview completed yet"],
+          gaps: ["Please complete an interview to see results"],
+          recommendations: ["Start a new interview session from the home page"],
+        })
+        
+        const placeholderMessage = "It looks like you haven't completed an interview yet. Please start and complete an interview to receive personalized feedback and scoring."
+        
+        setConversationMessages([
+          {
+            role: "assistant",
+            content: placeholderMessage,
+          },
+        ])
+        
+        speakMessage(placeholderMessage)
+        setIsLoadingSummary(false)
+        return
+      }
+
+      // Use interviewResult if available (new flow)
+      if (interviewResult && interviewResult.overall > 0) {
+        setOverallScore(interviewResult.overall)
+        setSummary({
+          strengths: interviewResult.highlights.map(h => typeof h === 'string' ? h : h.quote),
+          gaps: interviewResult.improvementSuggestions,
+          recommendations: interviewResult.improvementSuggestions,
+        })
+
+        // Add initial feedback message
+        const initialMessage = `Great job on your interview! You scored ${interviewResult.overall.toFixed(1)}/100. I noticed some strong points and areas for growth. Feel free to ask me about any of the feedback or anything else about your interview performance.`
+
+        setConversationMessages([
+          {
+            role: "assistant",
+            content: initialMessage,
+          },
+        ])
+
+        // Speak the initial message
+        speakMessage(initialMessage)
+        setIsLoadingSummary(false)
+        return
+      }
+
+      // Fallback to legacy API if no interviewResult but has scores
       const context = {
         role: state.role || "Software Engineer",
         level: state.level || "Mid",
@@ -78,7 +147,7 @@ export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
       }
 
       const result = await generateInterviewSummary(context)
-      setOverallScore(result.overallScore)
+      setOverallScore(result.overallScore * 10) // Convert to 0-100 scale
       setSummary({
         strengths: result.strengths,
         gaps: result.gaps,
@@ -86,7 +155,7 @@ export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
       })
 
       // Add initial feedback message
-      const initialMessage = `Great job on your interview! You scored ${result.overallScore.toFixed(1)}/10. I noticed some strong points and areas for growth. Feel free to ask me about any of the feedback or anything else about your interview performance.`
+      const initialMessage = `Great job on your interview! You scored ${(result.overallScore * 10).toFixed(1)}/100. I noticed some strong points and areas for growth. Feel free to ask me about any of the feedback or anything else about your interview performance.`
 
       setConversationMessages([
         {
@@ -99,11 +168,11 @@ export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
       speakMessage(initialMessage)
     } catch (error) {
       console.error("[v0] Error loading summary:", error)
-      setOverallScore(7.5)
+      setOverallScore(0) // Default to 0 if no interview completed
       setSummary({
-        strengths: ["Good communication"],
-        gaps: ["Continue practicing"],
-        recommendations: ["Review fundamentals"],
+        strengths: ["Interview not completed"],
+        gaps: ["Complete the interview to see results"],
+        recommendations: ["Start a new interview session"],
       })
     } finally {
       setIsLoadingSummary(false)
@@ -198,7 +267,7 @@ export function FeedbackSession({ state, onComplete }: FeedbackSessionProps) {
             <Card className="border-slate-800 bg-slate-900/50 backdrop-blur p-6 text-center">
               <p className="text-slate-400 text-sm mb-2">Overall Score</p>
               <p className="text-5xl font-bold text-white">{overallScore.toFixed(1)}</p>
-              <p className="text-slate-500 text-xs mt-2">/10</p>
+              <p className="text-slate-500 text-xs mt-2">/100</p>
             </Card>
             <Card className="border-slate-800 bg-slate-900/50 backdrop-blur p-6">
               <p className="text-slate-400 text-sm mb-3 font-semibold">Top Strengths</p>

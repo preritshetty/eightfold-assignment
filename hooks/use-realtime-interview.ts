@@ -226,14 +226,14 @@ Format as JSON:
         // Clear previous timer and set new one
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
         silenceTimerRef.current = setTimeout(() => {
-          // Auto-submit after 2 seconds of silence
+          // Auto-submit after 4 seconds of silence (increased to prevent interruption)
           const fullText = currentTranscriptRef.current.trim()
           if (fullText) {
             shouldBeListeningRef.current = false // Stop listening before processing
             handleUserResponse(fullText)
             currentTranscriptRef.current = "" // Reset for next response
           }
-        }, 2000)
+        }, 4000) // Increased from 2000 to 4000ms
       } else if (interimTranscript) {
         // Show interim results
         setInterviewState((prev) => ({
@@ -305,24 +305,32 @@ Format as JSON:
 
     // Ask first question via API
     const systemPrompt = buildInterviewSystemPrompt(state)
+    const hasResume = state.uploads?.cv?.content && state.uploads.cv.content.trim().length > 50
+    const hasJD = state.uploads?.jd?.content && state.uploads.jd.content.trim().length > 50
+    
+    const exampleWithResume = 'Hi! I noticed on your resume you worked on [actual specific project from resume] - that sounds interesting. What was the biggest challenge there?'
+    const exampleWithoutResume = 'Hi! Thanks for taking the time to chat today. To start, I would love to hear about a recent project you are proud of - what did you build and what technologies did you use?'
+    
     const firstPrompt = `
 You're beginning a CONVERSATIONAL interview for a ${state.level}-level ${state.role} position.
 
-${state.uploads?.cv?.content ? `The candidate has background in: ${state.uploads.cv.content.substring(0, 200)}...` : ''}
-${state.uploads?.jd?.content ? `Target role requires: ${state.uploads.jd.content.substring(0, 200)}...` : ''}
+${hasResume ? `The candidate has provided their resume with background in: ${state.uploads.cv.content.substring(0, 200)}...` : 'NO RESUME PROVIDED - Do NOT reference specific companies, projects, or details.'}
+${hasJD ? `Target role requires: ${state.uploads.jd.content.substring(0, 200)}...` : ''}
 
 Start with a warm, engaging opening question that:
 - Puts them at ease
 - Gets them talking about their experience naturally
 - Sets up for deeper technical questions later
-- References their background if available
+${hasResume ? '- References something specific from their actual resume' : '- Asks open-ended questions about their general experience (DO NOT invent resume details)'}
 
-Be conversational, like a real person. Avoid "Tell me about yourself" - be more specific.
+Be conversational, like a real person. Avoid generic "Tell me about yourself".
+
+${hasResume ? `Example: "${exampleWithResume}"` : `Example: "${exampleWithoutResume}"`}
 
 Format as JSON:
 {
-  "question": "Hi! I've been looking forward to this. I noticed you worked on [specific thing from CV] - that must have been interesting. What drew you to that kind of work?",
-  "thinking": "Opening with specific CV detail to build rapport"
+  "question": "Your opening question here",
+  "thinking": "Brief explanation of your approach"
 }
 `
 
@@ -376,6 +384,31 @@ Format as JSON:
     scoreCallbackRef.current = callback
   }, [])
 
+  const finalizeInterview = useCallback(async () => {
+    try {
+      // Import computeScore dynamically to avoid circular dependencies
+      const { computeScore } = await import("@/lib/interview-engine")
+      
+      // Build transcript from conversation
+      const transcript = conversationRef.current
+        .map(msg => `${msg.role === 'user' ? 'Candidate' : 'Interviewer'}: ${msg.content}`)
+        .join('\n\n')
+
+      const result = await computeScore({
+        conversationTranscript: transcript,
+        resumeText: state.uploads?.cv?.content,
+        questionMeta: [], // TODO: Track question metadata
+        role: state.role || "Software Engineer",
+        experienceLevel: state.level || "Mid",
+      })
+
+      return result
+    } catch (error) {
+      console.error("Failed to finalize interview:", error)
+      return null
+    }
+  }, [state])
+
   return {
     isConnected: interviewState.isConnected,
     isListening: interviewState.isListening,
@@ -386,10 +419,14 @@ Format as JSON:
     startInterview,
     stopInterview,
     setOnScoreUpdate,
+    finalizeInterview,
   }
 }
 
 function buildInterviewSystemPrompt(state: any): string {
+  const hasResume = state.uploads?.cv?.content && state.uploads.cv.content.trim().length > 50
+  const hasJD = state.uploads?.jd?.content && state.uploads.jd.content.trim().length > 50
+
   const prompt = `You are a REAL senior engineer/hiring manager conducting a NATURAL, CONVERSATIONAL interview for a ${state.level}-level ${state.role} position. This is NOT a scripted Q&A - it's a flowing discussion.
 
 YOUR PERSONALITY:
@@ -398,14 +435,14 @@ YOUR PERSONALITY:
 - You probe deeper on interesting points
 - You challenge gently when answers are vague
 - You make connections between different topics
-- You think out loud sometimes (\"Interesting, that reminds me of...\")
+- You think out loud sometimes ("Interesting, that reminds me of...")
 
 CONVERSATIONAL STYLE:
-✅ \"That's interesting - so when you ran into that scaling issue, how did your team react?\"
-✅ \"Hmm, I'm curious about the tradeoffs you considered there...\"
-✅ \"Right, that makes sense. Let me push back on that a bit though...\"
-❌ \"Tell me about a time when...\" (too scripted)
-❌ \"Question 3: Describe your experience with...\" (robotic)
+✅ "That's interesting - so when you ran into that scaling issue, how did your team react?"
+✅ "Hmm, I'm curious about the tradeoffs you considered there..."
+✅ "Right, that makes sense. Let me push back on that a bit though..."
+❌ "Tell me about a time when..." (too scripted)
+❌ "Question 3: Describe your experience with..." (robotic)
 
 ADAPTIVE INTERVIEWING:
 - If they give shallow answers → dig deeper, ask for specifics
@@ -414,9 +451,17 @@ ADAPTIVE INTERVIEWING:
 - If they excel → increase difficulty, challenge assumptions
 - Build on previous answers naturally
 
-${state.uploads?.cv?.content ? `\nCANDIDATE BACKGROUND:\n${state.uploads.cv.content.substring(0, 500)}\n\nREFERENCE THIS NATURALLY - mention their specific projects, companies, or skills when relevant.` : ""}
+${
+  hasResume
+    ? `\nCANDIDATE BACKGROUND:\n${state.uploads.cv.content.substring(0, 500)}\n\n✅ REFERENCE THIS NATURALLY - mention their specific projects, companies, or skills when relevant.\n❌ DO NOT invent or hallucinate details not in this resume.`
+    : `\n⚠️ NO RESUME PROVIDED\n❌ DO NOT reference specific companies, projects, or volunteer work\n❌ DO NOT say things like "I saw on your resume..." or "I noticed you worked at..."\n✅ Instead, ask open-ended questions like "Tell me about your experience with [skill]" or "Walk me through a recent project you worked on"`
+}
 
-${state.uploads?.jd?.content ? `\nTARGET ROLE:\n${state.uploads.jd.content.substring(0, 500)}\n\nPROBE FOR THESE SKILLS but do it conversationally, not as a checklist.` : ""}
+${
+  hasJD
+    ? `\nTARGET ROLE:\n${state.uploads.jd.content.substring(0, 500)}\n\nPROBE FOR THESE SKILLS but do it conversationally, not as a checklist.`
+    : ""
+}
 
 INTERVIEW FLOW:
 ~8-10 questions total, but LET THE CONVERSATION BREATHE
