@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+There are other files attached as well which will give detailed explainatiomns of the project they are .md extension files
 
 ## Getting Started
 
