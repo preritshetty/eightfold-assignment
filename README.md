@@ -1,4 +1,4 @@
-There are other files attached as well which will give detailed explainatiomns of the project they are .md extension files
+There are other files attached as well which will give detailed explainations of the project they are .md extension files
 
 ## Getting Started
 
